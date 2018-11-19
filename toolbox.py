@@ -1,4 +1,4 @@
-import csv,re
+import csv,re,os
 # import toolbox
 from logInit import *
 from apitest.parm import *
@@ -9,13 +9,13 @@ class Postman2Csv(object):
         self.header = csv_parm.CHINA_KEY #中文key
         self.key =  csv_parm.KEY #key
     def run(self):
-        try:
+        # try:
             data = self.getData()
             self.write2Csv(data)
             log.logger.info("postman转csv成功:%s"%self.resultpath)
-        except Exception as es:
-            log.logger.error("postman转csv失败")
-            log.logger.error(es)
+        # except Exception as es:
+        #     log.logger.error("postman转csv失败")
+        #     log.logger.error(es)
 
     def csvWrite(self,data): #写单行
         with open(self.resultpath, 'a', newline='') as csvfile:
@@ -48,7 +48,7 @@ class Postman2Csv(object):
             url = solo_data[PostParm.URL]
             url_list  = url.split("?")[0].split("/") #拆解url 获取path路径list
             url_parm = ""
-            if len(url)>1:   #包含? 增加 url params
+            if len(url.split("?"))>1:   #包含? 增加 url params
                 url_parm = url.split("?")[-1]
             url = url.split("?")[0] #去除?后内容
             error_headers = re.findall("\n//.*", solo_data[PostParm.HEADERS])  # //是为了处理postman 中被注释的数据
@@ -75,24 +75,51 @@ class Postman2Csv(object):
                          url_parm,  # UrlParams
                          "" #TestType
                         ]
+            if temp_list[code_parm.DATATYPE]==csv_parm.RAW:
+                temp_list[code_parm.DATA] = solo_data[PostParm.RAWMODEDATA]
             all_data.append(temp_list)
         return all_data
 
 class Csv2Dict(object):
-    def __init__(self,path="..//data//temp.csv"):
+    def __init__(self,path="..//data//temp.csv",debug=False):
+        self.debug = debug
         self.path = path
         self.key =  csv_parm.KEY #key
+
     def run(self):
-        try:
+        if self.debug:
             data = a.readAll()
             dict_data = a.list2Dict(data)
             logging.debug("CSV文件内容序列化成功:%s",str(dict_data))
             return dict_data
-        except Exception as ex:
-            logging.error("CSV文件内容序列化失败:%s", str(ex))
-            return False
+        else:
+            try:
+                data = a.readAll()
+                dict_data = a.list2Dict(data)
+                logging.debug("CSV文件内容序列化成功:%s", str(dict_data))
+                return dict_data
+            except Exception as ex:
+                logging.error("CSV文件内容序列化失败:%s", str(ex))
+                return False
 
-        print(dict_data)
+    def urlParamsDo(self,urlparams_string):
+        if urlparams_string:
+            urlparams = {}
+            params_list = urlparams_string.split("&")
+
+            for solo_param in params_list:
+                urlparams[solo_param.split("=")[0]]=solo_param.split("=")[1]
+            return urlparams
+        return urlparams_string
+    def dataParamsDo(self,data):
+        if len(data)>4:
+            data = eval(data)
+            body = {}
+            for solo_data in data:
+                body[solo_data["key"]] = solo_data["value"]
+            return body
+        return  data
+
     def readAll(self):
         temp_list = []
         with open(self.path, newline='') as csvfile:
@@ -111,6 +138,9 @@ class Csv2Dict(object):
             for sub_index,key in enumerate(data[index+1]):
                 solo_data[key] = data[index+2][sub_index]
             solo_data[csv_parm.HEADERS] = self.header2Dict(solo_data[csv_parm.HEADERS])
+            solo_data[csv_parm.URLPARAMS] = self.urlParamsDo(solo_data[csv_parm.URLPARAMS] )
+            if solo_data[csv_parm.DATATYPE] != RAW:
+                solo_data[csv_parm.DATA] = self.dataParamsDo(solo_data[csv_parm.DATA])
             data_temp.append(solo_data)
         return data_temp
     def header2Dict(self,header_string):
@@ -124,13 +154,64 @@ class Csv2Dict(object):
         header_string = '{'+header_string+'}'
         header_dict = eval(header_string)
         return header_dict
+class dict2Py(object):
+    def __init__(self,data=""):
+        self.data = data
+        self.tab = 0
+        self.path = '..\\postmandata\\'+data[csv_parm.RESUALPATH].split("\\")[1]
+        self.mkdir(self.path)
+        data[csv_parm.RESUALPATH] = '..\\postmandata\\' + data[csv_parm.RESUALPATH] +".py"
+
+    def mkdir(self,path):
+        folder = os.path.exists(path)
+        if not folder:
+            os.makedirs(path)
+    def setup(self):
+        pass
+
+
+    def write(self,data):
+        with open(self.data[csv_parm.RESUALPATH],"a") as file:
+            file.write("\t"*self.tab+data+"\n\n")
+    def mkpy(self):
+        querystring = False
+        payload = False
+        self.write("import requests")
+        self.write('url = "%s"'%self.data[csv_parm.URL])
+        if self.data[csv_parm.URLPARAMS]:
+            self.write('querystring = %s'%self.data[csv_parm.URLPARAMS])
+            querystring = True
+        if self.data[csv_parm.DATA] != "null":
+            self.write("payload = %s"%self.data[csv_parm.DATA])
+            payload = True
+        header_temp = "headers =%s"%self.data[csv_parm.HEADERS]
+        header_temp = header_temp.replace("\',","\',\n\t")
+        self.write(header_temp)
+        request_temp = 'response = requests.request("%s", url,'
+
+        if querystring:
+            request_temp += " params=querystring,"
+        if payload:
+            request_temp += "data=payload,"
+        self.write(request_temp%self.data[csv_parm.METHOD]+")")
+
+        self.write('print(response.text)')
+
+
+
 
 if __name__ == '__main__':
-    pass
+    # pass
     # test = Postman2Csv("..\\postmandata\\ijx.json.postman_collection")
     # test.run()
-    #
-    # a =  Csv2Dict()
-    # a.run()
+
+    a =  Csv2Dict(debug=True)
+    d = a.run()
+    # print (d)
+    for i in d:
+        temp = dict2Py(data = i)
+        temp.mkpy()
+    # d = dict2Py(data = d[0])
+    # d.mkpy()
 
 

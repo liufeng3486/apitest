@@ -1,3 +1,4 @@
+RAW = "raw"
 class PostParm:
     FALSE = False
     TRUE = True
@@ -9,6 +10,7 @@ class PostParm:
     HEADERS = "headers"
     DATA = "data"
     DATATYPE = "dataMode"
+    RAWMODEDATA = "rawModeData"
     # URLPARAMS = ""
     START = "START"
     END ="END"
@@ -28,3 +30,8 @@ class csv_parm:
     DATATYPE = "DataType"
     URLPARAMS = "UrlParams"
     TESTTYPE = "TestType"
+    RAW = "raw"
+
+class code_parm:
+    DATATYPE = 9
+    DATA = 8
